@@ -1,0 +1,22 @@
+# Binaries
+bin/
+*.exe
+
+# Local config and secrets
+.env
+.env.local
+
+# Logs
+*.log
+
+# Test output
+coverage.out
+coverage.html
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db

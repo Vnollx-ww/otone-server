@@ -1,0 +1,4 @@
+DROP TABLE IF EXISTS story_progress;
+DROP TABLE IF EXISTS refresh_tokens;
+DROP TABLE IF EXISTS players;
+DROP TABLE IF EXISTS users;

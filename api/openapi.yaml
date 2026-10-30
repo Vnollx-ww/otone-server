@@ -1,0 +1,341 @@
+openapi: 3.0.3
+info:
+  title: Otome Server API
+  version: 0.1.0
+  description: 乙游后端基础 API：账号、玩家资料、剧情进度。
+servers:
+  - url: http://127.0.0.1:8090
+paths:
+  /healthz:
+    get:
+      summary: 存活探针
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+  /readyz:
+    get:
+      summary: 就绪探针（检查 MySQL 与 Redis）
+      responses:
+        "200":
+          description: 所有依赖可用
+        "503":
+          description: 某个依赖不可用
+  /api/v1/auth/guest:
+    post:
+      summary: 游客登录；首次调用会按设备号自动注册
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GuestLoginRequest"
+      responses:
+        "200":
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/GuestLoginResponse"
+  /api/v1/auth/refresh:
+    post:
+      summary: 刷新访问令牌；刷新令牌会轮换，旧令牌立即失效
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "200":
+          description: 刷新成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/TokenPair"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/auth/logout:
+    post:
+      summary: 注销刷新令牌
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "200":
+          description: 已注销
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          revoked:
+                            type: boolean
+                            example: true
+  /api/v1/player/me:
+    get:
+      summary: 获取当前玩家资料
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Player"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    patch:
+      summary: 修改昵称
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePlayerRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Player"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/story/progress:
+    get:
+      summary: 获取当前玩家的剧情进度
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/StoryProgress"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    put:
+      summary: 保存剧情进度（按 user_id + chapter_id 覆盖）
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveProgressRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/StoryProgress"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  responses:
+    BadRequest:
+      description: 请求参数错误
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Envelope"
+    Unauthorized:
+      description: 未认证或令牌失效
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Envelope"
+  schemas:
+    Envelope:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: integer
+          example: 0
+        message:
+          type: string
+          example: ok
+        request_id:
+          type: string
+    GuestLoginRequest:
+      type: object
+      required: [device_id, platform]
+      properties:
+        device_id:
+          type: string
+          maxLength: 128
+        platform:
+          type: string
+          enum: [ios, android, pc, web, wechat_mini, douyin_mini]
+    GuestLoginResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        tokens:
+          $ref: "#/components/schemas/TokenPair"
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        platform:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    TokenPair:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+          example: Bearer
+        expires_in:
+          type: integer
+          description: 访问令牌有效期（秒）
+        expires_at:
+          type: string
+          format: date-time
+    RefreshRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+    Player:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        nickname:
+          type: string
+        level:
+          type: integer
+        exp:
+          type: integer
+          format: int64
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    UpdatePlayerRequest:
+      type: object
+      required: [nickname]
+      properties:
+        nickname:
+          type: string
+          minLength: 1
+          maxLength: 32
+    StoryProgress:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        chapter_id:
+          type: string
+        node_id:
+          type: string
+        content_version:
+          type: string
+        flags:
+          type: object
+          additionalProperties: true
+        updated_at:
+          type: string
+          format: date-time
+    SaveProgressRequest:
+      type: object
+      required: [chapter_id, node_id]
+      properties:
+        chapter_id:
+          type: string
+          maxLength: 64
+        node_id:
+          type: string
+          maxLength: 64
+        content_version:
+          type: string
+          maxLength: 32
+        flags:
+          type: object
+          additionalProperties: true
+          description: 剧情标记，最大 16KB
